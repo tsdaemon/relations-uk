@@ -9,13 +9,13 @@
 ##### Result: result file in output_path
 ##### Result format: %original_title%\t%query%\t%response_title%\t%categories%\t%kg_id%\t%wiki_link%\t%link%\t%score%
 
-import sys, io, os, urllib, json, re
+import sys, io, os, urllib, json, re, time
 
 api_keys = [u"AIzaSyDHCunhP-oL2cXrk_Ow5MsVnYSfEEaQXBw",
         u"AIzaSyCR25QkEvLWfYUq4BNJtRqUBBWpDlveXn4",
         u"AIzaSyDjD-B3-hRHGwNhxrTH4m1NZbq5bMPQqmw"]
 url = u"https://kgsearch.googleapis.com/v1/entities:search?query={0}&key={1}&limit=10&indent=True&languages=uk"
-wiki_url = u"https://uk.wikipedia.org/wiki/{0}"
+wiki_url = u"https://uk.wikipedia.org/wiki/"
 
 current_key = 0
 def knowlege_query(title):
@@ -35,47 +35,82 @@ def knowlege_query(title):
 def process_title(title, out_f):
     graph_result, query = knowlege_query(title)
     for item in graph_result["itemListElement"]:
-        types = ""
-        for type in item["result"]["@type"]:
-            types += type + ","
-        types = types[0:len(types)-1]
+        if(knowldge_record_filter(item,title)):
+            types = ""
+            for type in item["result"]["@type"]:
+                types += type + ","
+            types = types[0:len(types)-1]
 
-        line = "{0}\t{1}\t{2}\t{3}\t{4}\t{5}\n"\
-            .format(title, query, item["result"].get("name"), types, item["result"].get("@id"),
-                    wiki_url.format(title), item["result"].get("url"), item["result"].get("score"))
-        out_f.write(line)
+            line = "{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\t{7}\n"\
+                .format(title,
+                        query,
+                        item["result"].get("name"),
+                        types,
+                        item["result"].get("@id"),
+                        get_wiki_url(title),
+                        item["result"].get("detailedDescription",{}).get("url"),
+                        item["resultScore"])
+            out_f.write(line)
+
+def knowldge_record_filter(graph_result_item, title):
+    name = graph_result_item["result"].get("name")
+    if not name: return False
+    name = re.sub(r"\s", "", name).lower()
+    title = re.sub(r"\s", "", title).lower()
+    return name and title == name
+
+def get_wiki_url(title):
+    return wiki_url + re.sub(r"\s", "_", title)
+
+def read_till_title(last_title, wiki_f):
+    titles = 0
+    for line in wiki_f:
+        match = re.search(r"<(\w+)>(.+)</\w+>", line, re.U)
+        if match:
+            tag = match.group(1)
+            if(tag == "title"):
+                titles += 1
+                title = match.group(2)
+                if(title == last_title):
+                    return titles
+
+def read_to_annotate(index, wiki_f):
+    print('Starting annotation process from title #{0}'.format(index))
+    curr_index = 0
+    start = time.time()
+    for line in wiki_f:
+        match = re.search(r"<(\w+)>(.+)</\w+>", line, re.U)
+        if match:
+            tag = match.group(1)
+            if(tag == "title"):
+                title = match.group(2)
+                process_title(title, out_f)
+                index += 1
+                curr_index += 1
+                if(curr_index % 100 == 0):
+                    elapsed = time.time() - start
+                    print("{0}/~613k, processed {1}, elapsed {2}\n".format(index, curr_index, elapsed))
 
 if __name__ == '__main__':
     if len(sys.argv) < 3:
         print("Usage: ./extract_kg_annotations.py wikidump_path output_path")
     else:
         output_path = sys.argv[2]
-        titles_ready = 0
+        last_title = ""
+        # get last processed title to continue
         print('Checking already processed... ')
         if(os.path.isfile(output_path)):
             with io.open(output_path, mode='r', encoding='utf-8') as out_f:
-                previous_title = ""
-                for line in out_f:
-                    original_title = line.split("\t")[0]
-                    if(original_title != previous_title):
-                        previous_title = original_title
-                        titles_ready += 1
-        print('Done: already processed {0} articles.\n'.format(titles_ready))
+                last_title = out_f.readlines()[-1].split('\t')[0]
+                print('Done: last processed title is {0}.'.format(last_title))
 
         with io.open(output_path, mode='a', encoding='utf-8') as out_f:
-            print('Starting annotation process from article #{0}\n'.format(titles_ready))
-            current_title = 0
             with io.open(sys.argv[1], mode='r', encoding='utf-8') as wiki_f:
-                for line in wiki_f:
-                    match = re.search(r"<(\w+)>(.+)</\w+>", line, re.U)
-                    if match:
-                        tag = match.group(1)
-                        if(tag == "title"):
-                            title = match.group(2)
-                            if(current_title >= titles_ready):
-                                process_title(title, out_f)
-                                if(current_title % 100 == 0):
-                                    print("{0}/~613k, last {1}\n".format(current_title+1, title))
+                # moving wiki file position to last processed title
+                index = 0
+                if(len(last_title)):
+                    index = read_till_title(last_title, wiki_f)
 
-                            current_title += 1
+                read_to_annotate(index, wiki_f)
+
 
