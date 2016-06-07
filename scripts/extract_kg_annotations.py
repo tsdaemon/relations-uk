@@ -2,18 +2,17 @@
 # -*- coding: utf-8 -*-
 
 ##### Wikipedia articles annotation script
-##### Takes all articles from dump and ask Knowledge Graph for entity type
+##### Takes all articles from dump and ask Knowledge Graph for entity types
 ##### 2016 (c) Anatolii Stehnii <tsademon@gmail.com>
 
-##### Usage: ./extract_kg_annotations.py wikidump_path output_path
-##### Result: result file in output_path
+##### Usage: ./extract_kg_annotations.py api_keys_path wikidump_path output_path
+##### Result: result file at output_path
 ##### Result format: %original_title%\t%query%\t%response_title%\t%categories%\t%kg_id%\t%wiki_link%\t%link%\t%score%
 
 import sys, io, os, urllib, json, re, time
 
-api_keys = [u"AIzaSyDHCunhP-oL2cXrk_Ow5MsVnYSfEEaQXBw",
-        u"AIzaSyCR25QkEvLWfYUq4BNJtRqUBBWpDlveXn4",
-        u"AIzaSyDjD-B3-hRHGwNhxrTH4m1NZbq5bMPQqmw"]
+api_keys = []
+
 url = u"https://kgsearch.googleapis.com/v1/entities:search?query={0}&key={1}&limit=10&indent=True&languages=uk"
 wiki_url = u"https://uk.wikipedia.org/wiki/"
 
@@ -89,13 +88,18 @@ def read_to_annotate(index, wiki_f):
                 curr_index += 1
                 if(curr_index % 100 == 0):
                     elapsed = time.time() - start
-                    print("{0}/~613k, processed {1}, elapsed {2}\n".format(index, curr_index, elapsed))
+                    print("{0}/~613k, processed {1}, elapsed {2}.".format(index, curr_index, elapsed))
 
 if __name__ == '__main__':
-    if len(sys.argv) < 3:
-        print("Usage: ./extract_kg_annotations.py wikidump_path output_path")
+    if len(sys.argv) < 4:
+        print("Usage: ./extract_kg_annotations.py api_keys_path wikidump_path output_path")
     else:
-        output_path = sys.argv[2]
+        # get kg keys from config file
+        with io.open(sys.argv[1], mode='r', encoding='utf-8') as api_f:
+            for line in api_f:
+                api_keys.append(line.strip())
+
+        output_path = sys.argv[3]
         last_title = ""
         # get last processed title to continue
         print('Checking already processed... ')
@@ -105,7 +109,7 @@ if __name__ == '__main__':
                 print('Done: last processed title is {0}.'.format(last_title))
 
         with io.open(output_path, mode='a', encoding='utf-8') as out_f:
-            with io.open(sys.argv[1], mode='r', encoding='utf-8') as wiki_f:
+            with io.open(sys.argv[2], mode='r', encoding='utf-8') as wiki_f:
                 # moving wiki file position to last processed title
                 index = 0
                 if(len(last_title)):
