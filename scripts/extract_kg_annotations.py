@@ -9,7 +9,7 @@
 ##### Result: result file at output_path
 ##### Result format: %original_title%\t%query%\t%response_title%\t%categories%\t%kg_id%\t%wiki_link%\t%link%\t%score%
 
-import sys, io, os, urllib, json, re, time
+import sys, io, os, urllib.request, urllib.parse, json, re, time
 
 api_keys = []
 
@@ -24,9 +24,10 @@ def knowlege_query(title):
         with urllib.request.urlopen(query) as response:
             str_response = response.read().decode('utf-8')
             return json.loads(str_response), query
-    except Exception:
+    except Exception as e:
         current_key += 1
-        if(current_key >= len(api_keys)):
+        if current_key >= len(api_keys):
+            current_key = 0
             raise Exception("No more keys!")
         else:
             return knowlege_query(title), query
@@ -83,7 +84,11 @@ def read_to_annotate(index, wiki_f):
             tag = match.group(1)
             if(tag == "title"):
                 title = match.group(2)
-                process_title(title, out_f)
+                try:
+                    process_title(title, out_f)
+                except Exception as e:
+                    print(e)
+
                 index += 1
                 curr_index += 1
                 if(curr_index % 100 == 0):
