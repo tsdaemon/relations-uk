@@ -53,7 +53,7 @@ def process_title(title, out_f):
             out_f.write(line)
 
 def knowldge_record_filter(graph_result_item, title):
-    return true
+    return True
 
 def get_wiki_url(title):
     return wiki_url + re.sub(r"\s", "_", title)
